@@ -9,9 +9,14 @@ pub trait Manager: Sync + Send {
     /// Error that this [`Manager`] can return when creating and/or recycling
     /// [`super::Object`]s.
     type Error: Send;
+    /// Type for the logical database identifier
+    type LdbId: Send;
 
     /// Creates a new instance of [`Manager::Type`].
-    fn create(&self) -> impl Future<Output = Result<Self::Type, Self::Error>> + Send;
+    fn create(
+        &self,
+        ldb_id: &Self::LdbId,
+    ) -> impl Future<Output = Result<Self::Type, Self::Error>> + Send;
 
     /// Tries to recycle an instance of [`Manager::Type`].
     ///

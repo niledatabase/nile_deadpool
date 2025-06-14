@@ -107,7 +107,7 @@ impl Default for Timeouts {
 ///
 /// [`Object`]: super::Object
 /// [`Pool`]: super::Pool
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum QueueMode {
     /// Dequeue the object that was least recently added (first in first out).
@@ -115,6 +115,8 @@ pub enum QueueMode {
     Fifo,
     /// Dequeue the object that was most recently added (last in first out).
     Lifo,
+    /// Never keep and recycle objects, destroy them immediately after use.
+    None,
 }
 
 /// This error is used when building pools via the config `create_pool`
