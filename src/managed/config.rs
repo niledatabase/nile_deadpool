@@ -107,13 +107,15 @@ impl Default for Timeouts {
 ///
 /// [`Object`]: super::Object
 /// [`Pool`]: super::Pool
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum QueueMode {
     /// Dequeue the object that was least recently added (first in first out).
     Fifo,
     /// Dequeue the object that was most recently added (last in first out).
     Lifo,
+    /// Never keep and recycle objects, destroy them immediately after use.
+    None,
 }
 
 impl Default for QueueMode {

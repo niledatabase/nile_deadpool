@@ -96,9 +96,14 @@ pub trait Manager: Sync + Send {
     /// Error that this [`Manager`] can return when creating and/or recycling
     /// [`Object`]s.
     type Error: Send;
+    /// Type for the logical database identifier
+    type LdbId: Send;
 
     /// Creates a new instance of [`Manager::Type`].
-    fn create(&self) -> impl Future<Output = Result<Self::Type, Self::Error>> + Send;
+    fn create(
+        &self,
+        ldb_id: &Self::LdbId,
+    ) -> impl Future<Output = Result<Self::Type, Self::Error>> + Send;
 
     /// Tries to recycle an instance of [`Manager::Type`].
     ///
@@ -308,8 +313,8 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
     /// # Errors
     ///
     /// See [`PoolError`] for details.
-    pub async fn get(&self) -> Result<W, PoolError<M::Error>> {
-        self.timeout_get(&self.timeouts()).await
+    pub async fn get(&self, ldb_id: &M::LdbId) -> Result<W, PoolError<M::Error>> {
+        self.timeout_get(&self.timeouts(), ldb_id).await
     }
 
     /// Retrieves an [`Object`] from this [`Pool`] using a different `timeout`
@@ -318,7 +323,11 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
     /// # Errors
     ///
     /// See [`PoolError`] for details.
-    pub async fn timeout_get(&self, timeouts: &Timeouts) -> Result<W, PoolError<M::Error>> {
+    pub async fn timeout_get(
+        &self,
+        timeouts: &Timeouts,
+        ldb_id: &M::LdbId,
+    ) -> Result<W, PoolError<M::Error>> {
         let _ = self.inner.users.fetch_add(1, Ordering::Relaxed);
         let users_guard = DropGuard(|| {
             let _ = self.inner.users.fetch_sub(1, Ordering::Relaxed);
@@ -354,11 +363,12 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
             let inner_obj = match self.inner.config.queue_mode {
                 QueueMode::Fifo => self.inner.slots.lock().unwrap().vec.pop_front(),
                 QueueMode::Lifo => self.inner.slots.lock().unwrap().vec.pop_back(),
+                QueueMode::None => None,
             };
             let inner_obj = if let Some(inner_obj) = inner_obj {
                 self.try_recycle(timeouts, inner_obj).await?
             } else {
-                self.try_create(timeouts).await?
+                self.try_create(timeouts, ldb_id).await?
             };
             if let Some(inner_obj) = inner_obj {
                 break inner_obj;
@@ -424,6 +434,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
     async fn try_create(
         &self,
         timeouts: &Timeouts,
+        ldb_id: &M::LdbId,
     ) -> Result<Option<ObjectInner<M>>, PoolError<M::Error>> {
         let mut unready_obj = UnreadyObject {
             inner: Some(ObjectInner {
@@ -431,7 +442,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
                     self.inner.runtime,
                     TimeoutType::Create,
                     timeouts.create,
-                    self.inner.manager.create(),
+                    self.inner.manager.create(ldb_id),
                 )
                 .await?,
                 metrics: Metrics::default(),
@@ -634,7 +645,11 @@ impl<M: Manager> PoolInner<M> {
     fn return_object(&self, mut inner: ObjectInner<M>) {
         let _ = self.users.fetch_sub(1, Ordering::Relaxed);
         let mut slots = self.slots.lock().unwrap();
-        if slots.size <= slots.max_size {
+        if self.config.queue_mode == QueueMode::None {
+            drop(slots);
+            self.manager.detach(&mut inner.obj);
+            self.semaphore.add_permits(1);
+        } else if slots.size <= slots.max_size {
             slots.vec.push_back(inner);
             drop(slots);
             self.semaphore.add_permits(1);
