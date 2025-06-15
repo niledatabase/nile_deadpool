@@ -15,7 +15,7 @@
 //! ```
 
 pub use crate::{
-    managed::{Metrics, PoolConfig, Status, Timeouts},
+    managed::{metapool::MetaPool, Metrics, PoolConfig, Status, Timeouts},
     Runtime,
 };
 

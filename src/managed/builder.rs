@@ -1,4 +1,4 @@
-use std::{fmt, marker::PhantomData, time::Duration};
+use std::{fmt, marker::PhantomData, sync::Arc, time::Duration};
 
 use crate::Runtime;
 
@@ -43,7 +43,7 @@ where
     M: Manager,
     W: From<Object<M>>,
 {
-    pub(crate) manager: M,
+    pub(crate) manager: Arc<M>,
     pub(crate) config: PoolConfig,
     pub(crate) runtime: Option<Runtime>,
     pub(crate) hooks: Hooks<M>,
@@ -72,7 +72,7 @@ where
     M: Manager,
     W: From<Object<M>>,
 {
-    pub(crate) fn new(manager: M) -> Self {
+    pub(crate) fn new(manager: Arc<M>) -> Self {
         Self {
             manager,
             config: PoolConfig::default(),
