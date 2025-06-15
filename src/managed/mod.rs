@@ -53,6 +53,7 @@ mod config;
 mod dropguard;
 mod errors;
 mod hooks;
+mod metapool;
 mod metrics;
 pub mod reexports;
 
@@ -60,6 +61,7 @@ use std::{
     collections::VecDeque,
     fmt,
     future::Future,
+    hash::Hash,
     marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::{
@@ -83,6 +85,7 @@ pub use self::{
     config::{CreatePoolError, PoolConfig, QueueMode, Timeouts},
     errors::{PoolError, RecycleError, TimeoutType},
     hooks::{Hook, HookError, HookFuture, HookResult},
+    metapool::MetaPool,
     metrics::Metrics,
 };
 
@@ -97,7 +100,7 @@ pub trait Manager: Sync + Send {
     /// [`Object`]s.
     type Error: Send;
     /// Type for the logical database identifier
-    type LdbId: Send;
+    type LdbId: Sync + Send + Hash + Eq + Clone + 'static;
 
     /// Creates a new instance of [`Manager::Type`].
     fn create(
@@ -284,7 +287,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
     /// Instantiates a builder for a new [`Pool`].
     ///
     /// This is the only way to create a [`Pool`] instance.
-    pub fn builder(manager: M) -> PoolBuilder<M, W> {
+    pub fn builder(manager: Arc<M>) -> PoolBuilder<M, W> {
         PoolBuilder::new(manager)
     }
 
@@ -603,7 +606,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
 }
 
 struct PoolInner<M: Manager> {
-    manager: M,
+    manager: Arc<M>,
     slots: Mutex<Slots<ObjectInner<M>>>,
     /// Number of available [`Object`]s in the [`Pool`]. If there are no
     /// [`Object`]s in the [`Pool`] this number can become negative and store
