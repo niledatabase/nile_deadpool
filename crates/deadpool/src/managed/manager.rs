@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::hash::Hash;
 
 use crate::managed::{Metrics, RecycleError};
 
@@ -10,7 +11,7 @@ pub trait Manager: Sync + Send {
     /// [`super::Object`]s.
     type Error: Send;
     /// Type for the logical database identifier
-    type LdbId: Send;
+    type LdbId: Sync + Send + Hash + Eq + Clone + 'static;
 
     /// Creates a new instance of [`Manager::Type`].
     fn create(

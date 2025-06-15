@@ -1,5 +1,64 @@
-# Deadpool [![Latest Version](https://img.shields.io/crates/v/deadpool.svg)](https://crates.io/crates/deadpool) [![Build Status](https://img.shields.io/github/actions/workflow/status/bikeshedder/deadpool/ci.yml?branch=main)](https://github.com/bikeshedder/deadpool/actions?query=workflow%3ARust) ![Unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg "Unsafe forbidden") [![Rust 1.75+](https://img.shields.io/badge/rustc-1.75+-lightgray.svg "Rust 1.75+")](https://blog.rust-lang.org/2023/12/28/Rust-1.75.0.html)
+# Nile Deadpool
 
+/!\ This is a prototype only, and NOT ready for production. /!\
+
+Nile Deadpool is a fork of [deadpool](https://github.com/deadpool-rs/deadpool).
+It adds a thin layer on top of it to handle a "meta-pool" feature using a new
+`managed::MetaPool`.  This struct allows to connect to different databases in
+the same server configured in that `MetaPool`, with the guarantee that a
+recycled connection will be for the same database as the one requested.  The
+list of databases is entirely dynamic, and it's not necessary to reserve a
+fixed amount of connections on each database.
+
+The `MetaPool` is mostly a combination of:
+
+- a `moka::future::Cache<LdbId, managed::Pool>` for the most popuplar/active
+  ldbs
+- a single "generic" `managed::Pool` for non cached ldbs, where the connections
+  are never reused
+
+`MetaPool` does a best effort to not use more than the configured number of
+connection globally, but may temporarily do.
+
+Changes are also done on `managed::Pool`.  The `Manager` trait has a new
+associated type:
+
+```rust
+    /// Type for the logical database identifier
+    type LdbId: Sync + Send + Hash + Eq + Clone + 'static;
+```
+
+which is used in 2 of the trait functions:
+
+```rust
+    /// Creates a new instance of [`Manager::Type`].
+    fn create(
+        &self,
+        ldb_id: &Self::LdbId,
+    ) -> impl Future<Output = Result<Self::Type, Self::Error>> + Send;
+
+    /// Tries to recycle an instance of [`Manager::Type`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Manager::Error`] if the instance couldn't be recycled.
+    fn recycle(
+        &self,
+        obj: &mut Self::Type,
+        metrics: &Metrics,
+    ) -> impl Future<Output = RecycleResult<Self::Error>> + Send;
+```
+
+Finally, the `managed::config::QueueMode` has a new variant:
+
+```rust
+    /// Never keep and recycle objects, destroy them immediately after use.
+    None,
+```
+
+It's used inter
+
+## Deadpool
 
 Deadpool is a dead simple async pool for connections and objects
 of any type.

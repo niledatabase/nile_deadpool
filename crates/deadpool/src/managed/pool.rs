@@ -60,7 +60,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
     /// Instantiates a builder for a new [`Pool`].
     ///
     /// This is the only way to create a [`Pool`] instance.
-    pub fn builder(manager: M) -> PoolBuilder<M, W> {
+    pub fn builder(manager: Arc<M>) -> PoolBuilder<M, W> {
         PoolBuilder::new(manager)
     }
 
@@ -419,7 +419,7 @@ impl<M: Manager, W: From<Object<M>>> WeakPool<M, W> {
 }
 
 pub(crate) struct PoolInner<M: Manager> {
-    manager: M,
+    manager: Arc<M>,
     next_id: AtomicUsize,
     slots: Mutex<Slots<ObjectInner<M>>>,
     /// Number of ['Pool'] users. A user is both a future which is waiting for an ['Object'] or one

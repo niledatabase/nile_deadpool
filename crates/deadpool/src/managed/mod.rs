@@ -54,6 +54,7 @@ mod dropguard;
 mod errors;
 mod hooks;
 mod manager;
+mod metapool;
 mod metrics;
 mod object;
 mod pool;
@@ -67,6 +68,7 @@ pub use self::{
     errors::{PoolError, RecycleError, TimeoutType},
     hooks::{Hook, HookError, HookFuture, HookResult},
     manager::{Manager, RecycleResult},
+    metapool::MetaPool,
     metrics::Metrics,
     object::{Object, ObjectId},
     pool::{Pool, RetainResult, WeakPool},
