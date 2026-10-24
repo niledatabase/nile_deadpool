@@ -103,9 +103,12 @@ pub trait Manager: Sync + Send {
     type LdbId: Sync + Send + Hash + Eq + Clone + 'static;
 
     /// Creates a new instance of [`Manager::Type`].
+    ///
+    /// If `rolname` isn't `None`, then it should override the [`Pool`] default role.
     fn create(
         &self,
         ldb_id: &Self::LdbId,
+        rolname: Option<&str>,
     ) -> impl Future<Output = Result<Self::Type, Self::Error>> + Send;
 
     /// Tries to recycle an instance of [`Manager::Type`].
@@ -316,8 +319,12 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
     /// # Errors
     ///
     /// See [`PoolError`] for details.
-    pub async fn get(&self, ldb_id: &M::LdbId) -> Result<W, PoolError<M::Error>> {
-        self.timeout_get(&self.timeouts(), ldb_id).await
+    pub async fn get(
+        &self,
+        ldb_id: &M::LdbId,
+        rolname: Option<&str>,
+    ) -> Result<W, PoolError<M::Error>> {
+        self.timeout_get(&self.timeouts(), ldb_id, rolname).await
     }
 
     /// Retrieves an [`Object`] from this [`Pool`] using a different `timeout`
@@ -330,6 +337,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
         &self,
         timeouts: &Timeouts,
         ldb_id: &M::LdbId,
+        rolname: Option<&str>,
     ) -> Result<W, PoolError<M::Error>> {
         let _ = self.inner.users.fetch_add(1, Ordering::Relaxed);
         let users_guard = DropGuard(|| {
@@ -371,7 +379,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
             let inner_obj = if let Some(inner_obj) = inner_obj {
                 self.try_recycle(timeouts, inner_obj).await?
             } else {
-                self.try_create(timeouts, ldb_id).await?
+                self.try_create(timeouts, ldb_id, rolname).await?
             };
             if let Some(inner_obj) = inner_obj {
                 break inner_obj;
@@ -438,6 +446,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
         &self,
         timeouts: &Timeouts,
         ldb_id: &M::LdbId,
+        rolname: Option<&str>,
     ) -> Result<Option<ObjectInner<M>>, PoolError<M::Error>> {
         let mut unready_obj = UnreadyObject {
             inner: Some(ObjectInner {
@@ -445,7 +454,7 @@ impl<M: Manager, W: From<Object<M>>> Pool<M, W> {
                     self.inner.runtime,
                     TimeoutType::Create,
                     timeouts.create,
-                    self.inner.manager.create(ldb_id),
+                    self.inner.manager.create(ldb_id, rolname),
                 )
                 .await?,
                 metrics: Metrics::default(),
