@@ -107,16 +107,33 @@ impl<M: Manager + 'static, W: From<Object<M>> + 'static> MetaPool<M, W> {
     }
 
     /// Meta version of `Pool::get()`.
-    pub async fn get(&self, ldb_id: &M::LdbId) -> Result<W, PoolError<M::Error>> {
-        self.timeout_get(&self.timeouts, ldb_id).await
+    pub async fn get(
+        &self,
+        ldb_id: &M::LdbId,
+        rolname: Option<&str>,
+    ) -> Result<W, PoolError<M::Error>> {
+        self.timeout_get(&self.timeouts, ldb_id, rolname).await
     }
 
     /// Meta version of `Pool::timeout_get()`.
+    ///
+    /// If `rolname` isn't `None` then it should override the [`MetaPool`] default user.  If that's
+    /// the case the returned object will be taken from the generic pool and therefore will never
+    /// be recycled.  This is because we don't have a way to securly switch an existing beckend
+    /// connection identity (we don't prevent users from calling e.g. `DISCARD ALL`), and we also
+    /// don't want to add another dimention to the [`MetaPool`].
     pub async fn timeout_get(
         &self,
         timeouts: &Timeouts,
         ldb_id: &M::LdbId,
+        rolname: Option<&str>,
     ) -> Result<W, PoolError<M::Error>> {
+        // If a role name is specified, we directly get a connection from the generic pool.
+        if rolname.is_some()
+        {
+            return self.generic.get(ldb_id, rolname).await;
+        }
+
         // Get a Pool from the metapool, or try to insert one if not found.
         let entry = self
             .meta
@@ -152,7 +169,7 @@ impl<M: Manager + 'static, W: From<Object<M>> + 'static> MetaPool<M, W> {
             if self.meta.contains_key(ldb_id) {
                 // Key still present, we can use the entry.
                 let pool = entry.into_value();
-                Some(pool.timeout_get(timeouts, ldb_id).await)
+                Some(pool.timeout_get(timeouts, ldb_id, rolname).await)
             } else {
                 // Ldb didn't pass addmission control, we will have to use the generic pool.
                 None
@@ -160,7 +177,7 @@ impl<M: Manager + 'static, W: From<Object<M>> + 'static> MetaPool<M, W> {
         } else {
             // Existing entry, just use the value.
             let pool = entry.into_value();
-            Some(pool.timeout_get(timeouts, ldb_id).await)
+            Some(pool.timeout_get(timeouts, ldb_id, rolname).await)
         };
 
         // If we got a PoolError::Timeout when trying to acquire a connection from a meta pool,
@@ -178,7 +195,7 @@ impl<M: Manager + 'static, W: From<Object<M>> + 'static> MetaPool<M, W> {
         }
 
         // Could not get a connection from the meta pool, just use the generic pool.
-        self.generic.get(ldb_id).await
+        self.generic.get(ldb_id, rolname).await
     }
 }
 
