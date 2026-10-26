@@ -658,6 +658,7 @@ impl<M: Manager> PoolInner<M> {
         let _ = self.users.fetch_sub(1, Ordering::Relaxed);
         let mut slots = self.slots.lock().unwrap();
         if self.config.queue_mode == QueueMode::None {
+            slots.size -= 1;
             drop(slots);
             self.manager.detach(&mut inner.obj);
             self.semaphore.add_permits(1);
